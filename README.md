@@ -253,21 +253,579 @@ Microsoft Azure — облачная платформа. Предоставля�
 
 
 ШПОРА С КОМАНДАМИ ЧИСТО:
+
 ISP
+
 vim /etc/sysconfig/network – меняем hostname на ISP
+
 vim /etc/hostname – меняем имя на ISP
+
 reboot
+
 Запускаем rtr-ы
+
+
 ISP
+
 vim /etc/net/ifaces/ens18/options – <img width="133" height="52" alt="image" src="https://github.com/user-attachments/assets/485f24a4-acbb-4b16-afa3-3fe23fa02904" />
 
 vim /etc/net/ifaces/ens18/resolv.conf <img width="158" height="31" alt="image" src="https://github.com/user-attachments/assets/67dbf4ea-2153-4196-9e79-ec66c634d825" />
 
 mkdir /etc/net/ifaces/ens19 
-vim /etc/net/ifaces/ens19/ipv4address – 
-vim /etc/net/ifaces/ens19/options - 
+
+vim /etc/net/ifaces/ens19/ipv4address – <img width="179" height="34" alt="image" src="https://github.com/user-attachments/assets/7fb85351-98b5-4c17-ab45-794851646e8e" />
+
+vim /etc/net/ifaces/ens19/options - <img width="140" height="47" alt="image" src="https://github.com/user-attachments/assets/ab794599-9f77-41b0-aaf1-9205779b1635" />
+
 mkdir /etc/net/ifaces/ens20 
-vim /etc/net/ifaces/ens20/ipv4address - 
-vim /etc/net/ifaces/ens20/options - 
-vim etc/net/sysctl.conf - 
+
+vim /etc/net/ifaces/ens20/ipv4address - <img width="166" height="34" alt="image" src="https://github.com/user-attachments/assets/db353d44-4e53-4be5-b940-60709de968d0" />
+
+vim /etc/net/ifaces/ens20/options - <img width="140" height="47" alt="image" src="https://github.com/user-attachments/assets/01336682-0206-410c-a2d4-a35a00eeb8a8" />
+
+vim etc/net/sysctl.conf - <img width="316" height="28" alt="image" src="https://github.com/user-attachments/assets/cc75eee2-0c5a-4c52-963a-c8e25be82ad7" />
+
 systemct restart network (service network restart)
+
+apt-get update
+
+apt-get install iptables –y
+
+iptables –t nat –A POSTROUTING –o ens18 –j MASQUERADE
+
+iptables-save >> /etc/sysconfig /iptables
+
+systemctl enable --now iptables
+
+systemctl restart network
+
+iptables –t nat –L –n –v – проверка наличия правил
+
+reboot
+
+
+_________________________________
+Переходим к настройке Hq-rtr 
+
+hostname hq-rtr.au-team.irpo
+
+do show port brief (первый порт идет в сторону isp)
+
+int ISP
+
+ip address 172.16.4.2/28
+
+ex
+
+port te0
+
+servise-instance te0/ISP
+
+encapsulation untagged
+
+connect ip interface ISP
+
+int vl100
+
+ip address 172.17.250.65/26
+
+int vl200
+
+ip address 172.17.250.161/28
+
+int vl999
+
+ip address 172.17.250.177/29
+
+port te1 
+
+service-instance te1/vl100
+
+encapsulation dot1q vl100
+
+rewrite pop 1
+
+connect ip int vl100
+
+ex
+
+service-instance te1/vl200
+
+encapsulation dot1q vl200
+
+rewrite pop 1
+
+connect ip int vl200
+
+ex
+
+service-instance te1/vl999
+
+encapsulation dot1q vl999
+
+rewrite pop 1
+
+connect ip int vl999
+
+ex
+
+
+ex
+
+ip route 0.0.0.0/0 172.16.4.1
+
+ip name-server 77.88.8.8
+
+show ip int brief – должно быть так <img width="504" height="103" alt="image" src="https://github.com/user-attachments/assets/77ef0a6e-b347-441a-8773-77ec71de976e" />
+
+
+так же стоит проверить ping isp-rtr
+
+wr memory
+____________________________________
+Переходим к настройке Br-rtr 
+
+hostname br-rtr.au-team.irpo
+
+int ISP
+
+ip address 172.16.5.2/28
+
+ex
+
+port te0
+
+servise-instance te0/ISP
+
+encapsulation untagged
+
+connect ip interface ISP
+
+ex
+
+ex
+
+int vl100
+
+ip address 172.17.250.129/27
+
+ex
+
+port te1
+
+service-instance te1/vl100
+
+encapsulation dot1q vl100
+
+rewrite pop 1
+
+connect ip int vl100
+
+ip route 0.0.0.0/0 172.16.5.1
+
+ip name-server 77.88.8.8
+
+show ip int brief 
+
+так же стоит проверить ping isp-rtr
+
+wr memory
+
+_________________________
+
+Hq-srv
+
+vim /etc/net/ifaces/ens18/ipv4address – 172.17.250.66/26
+
+vim /etc/net/ifaces/ ens18/ipv4route - default via 172.17.250.65
+
+vim /etc/net/ifaces/ens18/resolv.conf <img width="210" height="41" alt="image" src="https://github.com/user-attachments/assets/e33e689a-485f-453c-9dfc-5f3099c03b24" />
+
+vim /etc/net/ifaces/ens18/options <img width="284" height="154" alt="image" src="https://github.com/user-attachments/assets/4431068e-b846-4b5f-b6b5-dc8646249cc3" />
+
+systemctl restart network
+
+hostname hq-srv
+
+useradd sshuser –u 1010
+
+passwd sshuser
+
+P@ssw0rd (два раза)
+
+gpasswd –a sshuser wheel
+
+vim/etc/openssh/sshd_config <img width="274" height="86" alt="image" src="https://github.com/user-attachments/assets/40d425a2-4f88-4fa3-858a-fa075208a7a9" />
+
+vim /etc/openssh/banner 
+
+systemctl restart sshd
+
+ssh –p 2024 localhost
+
+ssh –p 2024 sshuser@localhost
+
+(для обоих серверов) vim /etc/apt/apt.conf <img width="520" height="43" alt="image" src="https://github.com/user-attachments/assets/33585e43-32bf-4e04-86c6-1c43b0ebd81a" />
+
+_______________________________________________________________
+
+Br-srv
+
+vim /etc/net/ifaces/ens18/ipv4address – 172.17.250.130/27
+
+vim /etc/net/ifaces/ens18/ipv4route - default via 172.17.250.129
+
+vim /etc/net/ifaces/ens18/resolv.conf <img width="210" height="42" alt="image" src="https://github.com/user-attachments/assets/885473cf-1ed4-4dfe-b1df-749fa24ae654" />
+
+vim /etc/net/ifaces/ens18/options <img width="284" height="154" alt="image" src="https://github.com/user-attachments/assets/b5bfb198-41d0-42d1-857b-e3a16051e828" />
+
+systemctl restart network
+
+hostname br-srv
+
+useradd sshuser –u 1010
+
+passwd sshuser 
+
+P@ssw0rd (два раза)
+
+gpasswd –a sshuser wheel
+
+vim /etc/openssh/sshd_config <img width="259" height="81" alt="image" src="https://github.com/user-attachments/assets/193dfd63-2fa1-4320-9fa8-5973f7501a7f" />
+
+vim /etc/openssh/banner  
+
+systemctl restart sshd
+
+ssh –p 2024 localhost
+
+ssh –p 2024 sshuser@localhost
+
+__________________________________________________________
+
+hq-rtr/br-rtr (одинаковые команды)
+
+en
+
+conf t
+
+username net_admin
+
+password P@ssw0rd
+
+role admin
+
+wr memory
+
+show users localdb
+
+________________________________________________________
+
+hq-rtr
+
+interface tunnel.0
+
+ip address 10.10.10.1/30
+
+ip tunnel 172.16.4.2 172.16.5.2 mode gre
+
+wr memory
+
+show int tunnel.0
+
+_________________________________________________________
+
+
+bt-rtr
+
+interface tunnel.0
+
+ip address 10.10.10.2/30
+
+ip tunnel 172.16.5.2 172.16.4.2 mode gre
+
+wr memory
+
+show int tunnel.0
+
+__________________________________________________________
+
+hq-rtr
+
+en/conf t
+
+router ospf 1
+
+passive-interface default
+
+no passive-interface tunnel.0
+
+network 10.10.10.0/30 area 0
+
+network 172.17.250.64/26 area 0
+
+network 172.17.250.160/28 area 0
+
+network 172.17.250.176/29 area 0
+
+area 0 authentication
+
+ex
+
+int tunnel.0
+
+ip ospf authentication-key P@ssw0rd
+
+ex
+
+wr memory
+
+show ip ospf neighbor/show ip route ospf – для проверки
+
+____________________________________________________________
+
+br-rtr
+
+en/conf t
+
+router ospf 1
+
+passive-interface default
+
+no passive-interface tunnel.0
+
+network 10.10.10.0/30 area 0
+
+network 172.17.250.128/27 area 0
+
+area 0 authentication
+
+ex 
+
+int tunnel.0
+
+ip ospf authentication-key P@ssw0rd
+
+ex
+
+wr memory
+
+show ip ospf neighbor/show ip route ospf – для проверки
+
+после надо пропинговать сервера друг с другом
+
+_________________________________________________________________
+
+hq-rtr
+
+en/conf t
+
+int ISP
+
+ip nat outside
+
+int vl100
+
+ip nat inside
+
+int vl200
+
+ip nat inside
+
+int vl999
+
+ip nat inside
+
+ip nat pool HQ 172.17.250.65-172.17.250.254
+
+ip nat source dynamic inside-to-outside pool HQ overload interface ISP
+
+wr memory
+
+_____________________________________________________________________
+
+br-rtr
+
+en/conf t
+
+int ISP
+
+ip nat outside
+
+int vl100
+
+ip nat inside
+
+ip nat pool BR 172.17.250.129-172.17.250.254
+
+ip nat source dynamic inside-to-outside pool BR overload interface ISP
+
+пингуем сервера с ISP
+
+show ip nat translations
+
+пробуем прописать apt-get update на серверах
+
+wr memory
+
+________________________________________________________________________
+
+hq-rtr
+
+en/conf t
+
+ip pool HQ-clients 172.17.250.162-172.250.174
+
+dhcp-server
+
+pool HQ-clients 1
+
+mask 255.255.255.240
+
+gateway 172.17.250.161
+
+dns 172.17.250.66
+
+domain-name au-team.irpo
+
+ex
+
+ex
+
+int vl200
+
+dhcp-server 1
+
+ex
+
+wr memory
+
+show dhcp-server 1 detailed
+
+show dhcp-server clients vl200 (после получения ip на hq-cli)
+
+_______________________________________________________________________
+
+hq-cli
+
+заходим в машину, используем dhcp <img width="349" height="140" alt="image" src="https://github.com/user-attachments/assets/381a6664-ef70-40a8-9e2b-ae9568791a7f" />
+
+_____________________________________________________________________
+
+hq-srv
+
+apt-get update && apt-get install bind –y
+
+cd /etc/bind
+
+mcedit named.conf – комментируем вторую строку <img width="433" height="85" alt="image" src="https://github.com/user-attachments/assets/48acd486-a99a-4d93-976a-5e23064d6493" />
+
+mcedit options.conf (следующие параметры нужно изменить):
+
+ listen-on { 172.17.250.66; };
+ 
+ //listen-on-v6 { ::1; };
+ 
+forwarders { 77.88.8.8; };
+
+allow-query { any; }
+
+allow-query-cache { any; }	
+
+allow-recursion { any; }
+
+mcedit local.conf 
+
+zone “au-team.irpo”{
+
+	type master;
+ 
+	file “etc/bind/zone/db.au”;
+ 
+}; <img width="505" height="199" alt="image" src="https://github.com/user-attachments/assets/f1e1c751-d84a-492c-9408-5971ef8573b0" />
+
+
+zone “250.17.172.in-addr.arpa” {
+
+	type master;
+ 
+	file “etc/bind/zone/db.reverse”;
+ 
+};
+
+cd zone
+
+ls
+
+cp localhost db.au
+
+mcedit db.au <img width="427" height="253" alt="image" src="https://github.com/user-attachments/assets/24bdcf3a-7334-4874-b943-e935116ec8db" />
+
+
+cp db.au db.reverse
+
+chown root:named db.*
+
+mcedit db.reverse <img width="447" height="183" alt="image" src="https://github.com/user-attachments/assets/48a16787-00d9-4da6-93ae-0c1b821da094" />
+
+
+
+named-checkzone au-team.irpo db.au
+
+named-checkzone 250.17.172.in-addr.arpa db.reverse
+
+sustemctl restart bind
+
+cd /etc/net/ifaces/ens18/
+
+mcedit resolv.conf <img width="244" height="52" alt="image" src="https://github.com/user-attachments/assets/3128fa1d-7ce2-4868-92e1-b1afda95676b" />
+
+systemctl restart network
+
+systemctl restart bind
+
+host hq-srv
+
+_______________________________________________________
+
+Hq-rtr/br-rtr
+
+en/conf t
+
+ip name-server 172.17.250.66
+
+ip domain-name au-team.irpo
+
+ip domain-lookup
+
+no ip name-server 77.88.8.8 (если есть в sh run)
+
+do ping hq-srv
+
+wr memory
+
+____________________________________________________________
+
+Br-srv hq-cli
+
+Нужно зайти в resolv.conf
+
+vim /etc/net/ifaces/ens18/resolv.conf - делаем так же <img width="244" height="52" alt="image" src="https://github.com/user-attachments/assets/ba9f54cf-e564-4372-8ca0-7834ae96ed82" />
+
+____________________________________________________________
+
+hq-cli/hq-srv/br-srv/ISP
+
+timedatectl set-timezone Europe/Moscow
+
+timedatectl
+
+__________________________________________________________
+
+Hq-rtr/br-rtr
+
+ntp timezone utc+3
+
+show ntp timezone
+
+_____________________________________________________________
