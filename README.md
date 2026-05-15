@@ -415,7 +415,7 @@ port te1
 
 service-instance te1/vl100
 
-encapsulation dot1q vl100
+encapsulation untagged
 
 rewrite pop 1
 
