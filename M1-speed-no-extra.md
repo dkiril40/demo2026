@@ -1,0 +1,280 @@
+# ⏱ Модуль 1 — Быстрый готовый конфиг с командами без лишнего 🔥
+
+## Заточен под реальный стенд на Proxmox в колледже
+
+### 🐧 ISP
+
+```
+hostnamectl set-hostname ISP;exec bash
+
+mkdir /etc/net/ifaces/ens19
+mkdir /etc/net/ifaces/ens20
+echo 'TYPE=eth' > /etc/net/ifaces/ens19/options 
+echo 'TYPE=eth' > /etc/net/ifaces/ens20/options
+echo 172.16.1.1/28 > /etc/net/ifaces/ens19/ipv4address 
+echo 172.16.2.1/28 > /etc/net/ifaces/ens20/ipv4address
+systemctl restart network
+
+apt-get update && apt-get install tzdata nftables -y
+exec bash
+timedatectl set-timezone Europe/Moscow
+
+cat <<'EOT' > /etc/nftables/nftables.nft
+#!/usr/sbin/nft -f
+flush ruleset
+table ip nat {
+ chain postrouting {
+  type nat hook postrouting priority srcnat
+  oifname "ens18" masquerade
+ }
+}
+EOT
+systemctl enable --now nftables
+
+echo "net.ipv4.ip_forward = 1" >> /etc/net/sysctl.conf
+systemctl restart network
+cat /proc/sys/net/ipv4/ip_forward
+```
+
+### 🍃 HQ-RTR
+
+```
+hostname hq-rtr.au-team.irpo
+ip domain-name au-team.irpo
+
+port te0
+service-instance te0/isp-hq
+encapsulation untagged
+
+port te1
+service-instance te1/srv-net
+encapsulation dot1q 100
+rewrite pop 1
+
+service-instance te1/cli-net
+encapsulation dot1q 200
+rewrite pop 1
+
+service-instance te1/management
+encapsulation dot1q 999
+rewrite pop 1
+
+interface e1
+ip address 172.16.1.2/28
+connect port te0 service-instance te0/isp-hq
+ip nat outside
+
+interface e2
+ip address 192.168.1.1/27
+connect port te1 service-instance te1/srv-net
+ip nat inside
+
+interface e3
+ip address 192.168.1.33/27
+connect port te1 service-instance te1/cli-net
+ip nat inside
+
+interface e4
+ip address 192.168.1.65/29
+connect port te1 service-instance te1/management
+ip nat inside
+
+ntp timezone utc+3
+
+username net_admin
+password P@ssw0rd
+role admin
+
+ip pool dhcp 1
+range 192.168.1.34-192.168.1.62
+
+dhcp-server 1
+pool dhcp 64
+mask 255.255.255.224	
+gateway 192.168.1.33
+dns 192.168.1.2
+domain-name au-team.irpo
+
+interface e3
+dhcp-server 1
+
+ip nat pool nat 192.168.1.1-192.168.1.30,192.168.1.33-192.168.1.62,192.168.1.65-192.168.1.70
+ip nat source dynamic inside-to-outside pool nat overload interface e1
+
+ip route 0.0.0.0/0 172.16.1.1 description default
+
+interface tunnel.1
+ip add 192.168.10.1/30
+ip tunnel 172.16.1.2 172.16.2.2 mode gre
+ip ospf authentication
+ip ospf authentication-key P@$$word
+
+router ospf 1
+network 192.168.10.0/30 area 0.0.0.0
+network 192.168.1.0/27 area 0.0.0.0
+network 192.168.1.32/27 area 0.0.0.0
+network 192.168.100.64/29 area 0.0.0.0
+passive-interface default
+no passive-interface tunnel.1
+
+write memory
+```
+
+### 🍃 BR-RTR
+
+```
+hostname br-rtr.au-team.irpo
+ip domain-name au-team.irpo
+
+port te0
+service-instance te0/isp-br
+encapsulation untagged
+
+port te1
+service-instance te1/br-net
+encapsulation-untagged
+
+interface e1
+ip address 172.16.2.2/28
+connect port te0 service-instance te0/isp-br
+ip nat outside
+
+interface e2
+ip address 192.168.2.1/28
+connect port te1 service-instance te1/br-net
+ip nat inside
+
+ntp timezone utc+3
+
+username net_admin
+password P@ssw0rd
+role admin
+
+ip nat pool nat 192.168.2.1-192.168.2.14
+ip nat source dynamic inside-to-outside pool nat overload interface e1
+
+ip route 0.0.0.0/0 172.16.2.1 description default
+
+interface tunnel.1
+ip add 192.168.10.2/30
+ip tunnel 172.16.2.2 172.16.1.2 mode gre
+ip ospf authentication
+ip ospf authentication-key P@$$word
+
+router ospf 1
+network 192.168.10.0/30 area 0.0.0.0
+network 192.168.2.0/28 area 0.0.0.0
+passive-interface default
+no passive-interface tunnel.1
+
+write memory
+```
+
+### 🐧 HQ-CLI
+
+```
+hostnamectl set-hostname hq-cli.au-team.irpo;exec bash
+
+nano /etc/net/ifaces/ens18/options
+NM_CONTROLLED=no
+DISABLED=no
+systemctl restart network
+
+timedatectl set-timezone Europe/Moscow
+```
+
+### 🐧 BR-SRV
+
+```
+hostnamectl set-hostname br-srv.au-team.irpo;exec bash
+
+vim /etc/net/ifaces/ens18/options
+BOOTPROTO=static
+echo 192.168.2.2/28 > /etc/net/ifaces/ens18/ipv4address
+echo default via 192.168.2.1 > /etc/net/ifaces/ens18/ipv4route
+systemctl restart network
+
+timedatectl set-timezone Europe/Moscow
+
+useradd -s /bin/bash -u 2026 sshuser
+echo "sshuser:P@ssw0rd" | chpasswd
+gpasswd -a sshuser wheel
+echo 'sshuser ALL = (root) NOPASSWD: ALL' >> /etc/sudoers
+
+vim /etc/openssh/sshd_config
+Port 2026
+MaxAuthTries 2
+Banner /etc/openssh/banner
+AllowUsers sshuser
+echo Authorized access only > /etc/openssh/banner
+systemctl restart sshd
+```
+
+### 🐧 HQ-SRV
+
+```
+hostnamectl set-hostname hq-srv.au-team.irpo;exec bash
+
+vim /etc/net/ifaces/ens18/options
+BOOTPROTO=static
+echo 192.168.1.2/27 > /etc/net/ifaces/ens18/ipv4address
+echo default via 192.168.1.1 > /etc/net/ifaces/ens18/ipv4route
+systemctl restart network
+
+timedatectl set-timezone Europe/Moscow
+
+useradd -s /bin/bash -u 2026 sshuser
+echo "sshuser:P@ssw0rd" | chpasswd
+gpasswd -a sshuser wheel
+echo 'sshuser ALL = (root) NOPASSWD: ALL' >> /etc/sudoers
+
+vim /etc/openssh/sshd_config
+Port 2026
+MaxAuthTries 2
+Banner /etc/openssh/banner
+AllowUsers sshuser
+echo Authorized access only > /etc/openssh/banner
+systemctl restart sshd
+
+apt-get update && apt-get install dnsmasq -y
+echo 'OPTIONS=""' > /etc/sysconfig/dnsmasq
+systemctl restart network
+cat <<'EOT' > /etc/dnsmasq.conf
+no-resolv
+no-poll
+no-hosts
+
+server=77.88.8.7
+server=195.208.4.1
+server=8.8.8.8
+
+cache-size=1000
+all-servers
+no-negcache
+
+host-record=hq-rtr.au-team.irpo,192.168.1.1
+host-record=hq-srv.au-team.irpo,192.168.1.2
+host-record=hq-cli.au-team.irpo,192.168.1.34
+
+address=/br-rtr.au-team.irpo/192.168.2.1
+address=/br-srv.au-team.irpo/192.168.2.2
+
+address=/docker.au-team.irpo/172.16.1.1
+address=/web.au-team.irpo/172.16.2.1
+EOT
+systemctl enable --now dnsmasq
+```
+
+### Принцип: anyway за час, максимум команд на одном устройстве за один подход последовательно
+
+### Удобно, но ...
+
+### Нельзя НЕ уложиться за час, иначе большинство заданий будут НЕ доделаны! Много баллов в −
+
+### Требуется максимальная подготовка и "набивание руки"
+
+> [!NOTE]
+> IP-адреса/маски в зависимости от требования задания в попавшемся варианте. Учитывайте это
+>
+> Рекомендую сначала заполнить таблицу, затем приступать к настройке
+
